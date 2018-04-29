@@ -8,7 +8,7 @@ class Boat(ndb.Model):
     # TODO: Define a human-friendly alphanumeric ID scheme, if time permits
     # id = ndb.StringProperty()
     name = ndb.StringProperty(required=True)
-    type = ndb.StringProperty()
+    type = ndb.StringProperty(required=True)
     length = ndb.IntegerProperty(required=True)
     at_sea = ndb.BooleanProperty(default=True)
 
@@ -84,6 +84,10 @@ class BoatHandler(webapp2.RequestHandler):
         if slip:
             slip.current_boat = None
             slip.arrival_date = None
+
+            departure = dict(departure_date=date.today().strftime("%m/%d/%Y"), departed_boat=boat_key.id())
+            slip.departure_history.append(departure)
+
             slip.put()
 
         boat_key.delete()
@@ -138,6 +142,14 @@ class BoatDockedHandler(webapp2.RequestHandler):
                 send_error(self.response, 400, response_message_json("FAILURE", "The boat is not at sea and not docked."))
                 return
 
+            if "departure_date" in request_data and request_data["departure_date"]:
+                departure_date = request_data["departure_date"]
+            else:
+                departure_date = date.today().strftime("%m/%d/%Y")
+
+            departure = dict(departure_date=departure_date, departed_boat=boat_id)
+            current_slip.departure_history.append(departure)
+
             current_slip.current_boat = None
             current_slip.arrival_date = None
             current_slip.put()
@@ -187,7 +199,7 @@ class Slip(ndb.Model):
     number = ndb.IntegerProperty(required=True)
     current_boat = ndb.IntegerProperty(indexed=True)
     arrival_date = ndb.StringProperty()
-    # TODO: Optional departure_history
+    departure_history = ndb.JsonProperty(repeated=True)
 
     @classmethod
     def get_by_id(cls, slip_id):
@@ -201,8 +213,8 @@ class Slip(ndb.Model):
 
     def to_json_ready(self):
         slip_json_ready = dict(id=self.key.id(), number=self.number, current_boat=self.current_boat,
-                               arrival_date=self.arrival_date, self="/slips/" + str(self.key.id()),
-                               boat_url=None)
+                               arrival_date=self.arrival_date, departure_history=self.departure_history,
+                               self="/slips/" + str(self.key.id()), boat_url=None)
         if self.current_boat:
             slip_json_ready["boat_url"] = "/boats/" + str(self.current_boat)
 
